@@ -1,4 +1,11 @@
-import EventHandler from './eventHandler'
+import Util from '../util'
+
+/**
+ * --------------------------------------------------------------------------
+ * Bootstrap (v4.1.1): dom/polyfill.js
+ * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE)
+ * --------------------------------------------------------------------------
+ */
 
 const Polyfill = (() => {
   // defaultPrevented is broken in IE.
@@ -70,24 +77,93 @@ const Polyfill = (() => {
     window.Event.prototype = origEvent.prototype
   }
 
-  // focusin and focusout polyfill
-  if (typeof window.onfocusin === 'undefined') {
-    (() => {
-      function listenerFocus(event) {
-        EventHandler.trigger(event.target, 'focusin')
+  // matches polyfill (see: https://mzl.la/2ikXneG)
+  if (!Element.prototype.matches) {
+    Element.prototype.matches =
+      Element.prototype.msMatchesSelector ||
+      Element.prototype.webkitMatchesSelector
+  }
+
+  // closest polyfill (see: https://mzl.la/2vXggaI)
+  let closest
+  if (!Element.prototype.closest) {
+    closest = (element, selector) => {
+      let ancestor = element
+      do {
+        if (ancestor.matches(selector)) {
+          return ancestor
+        }
+
+        ancestor = ancestor.parentElement
+      } while (ancestor !== null && ancestor.nodeType === Node.ELEMENT_NODE)
+
+      return null
+    }
+  } else {
+    closest = (element, selector) => element.closest(selector)
+  }
+
+  const supportScopeQuery = (() => {
+    const element = document.createElement('div')
+    try {
+      element.querySelectorAll(':scope *')
+    } catch (e) {
+      return false
+    }
+
+    return true
+  })()
+
+  const scopeSelectorRegex = /:scope\b/
+  let find = Element.prototype.querySelectorAll
+  let findOne = Element.prototype.querySelector
+
+  if (!supportScopeQuery) {
+    find = function (selector) {
+      if (!scopeSelectorRegex.test(selector)) {
+        return this.querySelectorAll(selector)
       }
-      function listenerBlur(event) {
-        EventHandler.trigger(event.target, 'focusout')
+
+      const hasId = Boolean(this.id)
+      if (!hasId) {
+        this.id = Util.getUID('scope')
       }
-      EventHandler.on(document, 'focus', 'input', listenerFocus)
-      EventHandler.on(document, 'blur', 'input', listenerBlur)
-    })()
+
+      let nodeList = null
+      try {
+        selector = selector.replace(scopeSelectorRegex, `#${this.id}`)
+        nodeList = this.querySelectorAll(selector)
+      } finally {
+        if (!hasId) {
+          this.removeAttribute('id')
+        }
+      }
+
+      return nodeList
+    }
+
+    findOne = function (selector) {
+      if (!scopeSelectorRegex.test(selector)) {
+        return this.querySelector(selector)
+      }
+
+      const matches = find.call(this, selector)
+      if (typeof matches[0] !== 'undefined') {
+        return matches[0]
+      }
+
+      return null
+    }
   }
 
   return {
     get defaultPreventedPreservedOnDispatch() {
       return defaultPreventedPreservedOnDispatch
-    }
+    },
+    focusIn: typeof window.onfocusin === 'undefined',
+    closest,
+    find,
+    findOne
   }
 })()
 
